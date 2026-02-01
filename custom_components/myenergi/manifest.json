@@ -1,11 +1,7 @@
 {
   "domain": "myenergi",
   "name": "myenergi",
-  "codeowners": [
-    "@cjne",
-    "@g6ejd",
-    "@AJediIAm"
-  ],
+  "codeowners": ["@cjne", "@g6ejd", "@AJediIAm"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/cjne/ha-myenergi",
