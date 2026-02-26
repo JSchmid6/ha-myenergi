@@ -48,6 +48,8 @@ It will create HA devices depending on what you have installed:
   - Service to start smart boost (provide boost amount in kWh and desired finished time as parameters)
   - Service to stop boost
   - Service to unlock the Zappi
+  - Experimental service to enable/disable managed mode (requires app credentials in integration options)
+  - Experimental service to set one super schedule slot with optional charge rate and energy target (requires app credentials)
   - Sensor for PIN Lock Status (This is not very useful in the real world)
   - Sensor for Charge when Locked Status (This is the sensor that relates to the "unlock" service call and is the one you will want to use)
   - Sensor for lock when plugged in status
@@ -147,6 +149,29 @@ Helpers > Create Helper > Template > Template a binary sensor
 is_state('sensor.zappi_charger_status', 'Boosting') and is_state('binary_sensor.zappi_plugged_in', 'on'))}}`
 - Device class: Charging
 - Device: Myenergi Zappi
+
+### Blueprint: PV export to near-zero with managed mode
+
+This repository now includes a Home Assistant automation blueprint:
+
+- `blueprints/automation/myenergi/zappi_pv_export_zero_grid.yaml`
+
+What it does:
+
+- Reads current export-to-grid power in watts.
+- Uses `myenergi_set_super_schedule_slot` to set charge rate based on export power.
+- Switches to `MODE_STOP` when export is too low.
+
+Requirements:
+
+- `app_email` and `app_password` configured in integration options.
+- Zappi that supports managed mode / super schedule.
+- A sensor where positive values mean export to grid.
+
+To import:
+
+1. Copy the blueprint YAML to your Home Assistant config folder under `blueprints/automation/myenergi/`.
+2. In Home Assistant, go to Automation & Scenes -> Blueprints -> Import blueprint -> Use local file.
 
 ## Troubleshooting
 

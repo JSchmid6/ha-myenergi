@@ -95,3 +95,74 @@ myenergi_libbi_charge_target:
           min: 0
           max: 20400
           step: 255
+myenergi_set_managed_mode:
+  name: Set managed mode
+  description: Enable/disable Zappi managed mode and optional auto scheduler
+  target:
+    device:
+      model: Zappi
+    entity:
+      domain: select
+  fields:
+    managed_mode_enabled:
+      name: Managed mode enabled
+      description: Enable/disable managed mode
+      required: true
+      selector:
+        boolean:
+    auto_scheduler_enabled:
+      name: Auto scheduler enabled
+      description: Optionally enable/disable auto scheduler
+      required: false
+      selector:
+        boolean:
+myenergi_set_super_schedule_slot:
+  name: Set super schedule slot
+  description: Set a single super schedule slot for managed mode capable Zappi
+  target:
+    device:
+      model: Zappi
+    entity:
+      domain: select
+  fields:
+    start_time:
+      name: Start time (UTC ISO-8601)
+      description: Start time in UTC, e.g. 2026-01-15T22:00:00.000Z
+      required: true
+      selector:
+        text:
+    end_time:
+      name: End time (UTC ISO-8601)
+      description: End time in UTC, e.g. 2026-01-16T06:00:00.000Z
+      required: true
+      selector:
+        text:
+    mode:
+      name: Mode
+      description: Charging mode for this slot
+      required: true
+      selector:
+        select:
+          options:
+            - MODE_FAST
+            - MODE_ECO
+            - MODE_ECO_PLUS
+            - MODE_STOP
+    charge_rate_watts:
+      name: Charge rate watts
+      description: Optional target charge rate in watts
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 22000
+          step: 1
+    energy_target_wh:
+      name: Energy target Wh
+      description: Optional target energy in watt-hours
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 1

@@ -166,3 +166,19 @@ def mock_zappi_unlock():
     """Return a mocked Zappi object."""
     with patch("pymyenergi.client.Zappi.unlock") as unlock:
         yield unlock
+
+
+@pytest.fixture
+def mock_set_managed_mode():
+    """Return a mocked managed mode service handler."""
+    with patch("custom_components.myenergi.entity.MyenergiEntity.set_managed_mode") as handler:
+        yield handler
+
+
+@pytest.fixture
+def mock_set_super_schedule_slot():
+    """Return a mocked super schedule service handler."""
+    with patch(
+        "custom_components.myenergi.entity.MyenergiEntity.set_super_schedule_slot"
+    ) as handler:
+        yield handler

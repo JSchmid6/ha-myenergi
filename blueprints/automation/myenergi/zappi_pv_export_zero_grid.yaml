@@ -1,0 +1,194 @@
+blueprint:
+  name: myenergi - Zappi PV Export to Grid-Zero (Managed Mode)
+  description: >
+    Dynamically uses exported PV power for Zappi charging and tries to regulate
+    export toward zero. The automation updates a Super Schedule slot repeatedly:
+    - if export is high enough, it sets a charge rate based on current export
+    - if export is too low, it switches to MODE_STOP
+
+    Requirements:
+    - myenergi integration with app_email/app_password configured
+    - Zappi supports managed mode / super schedule
+    - Use a sensor where positive values mean export to grid (W)
+  domain: automation
+  source_url: https://github.com/CJNE/ha-myenergi
+  input:
+    zappi_select_entity:
+      name: Zappi select entity
+      description: Usually select.myenergi_<name>_charge_mode
+      selector:
+        entity:
+          domain: select
+
+    export_power_sensor:
+      name: Grid export power sensor (W)
+      description: Sensor with positive values when exporting to grid
+      selector:
+        entity:
+          domain: sensor
+
+    zappi_plugged_binary:
+      name: Optional plugged-in binary sensor
+      description: If provided and OFF, charging is forced to MODE_STOP
+      default: ""
+      selector:
+        entity:
+          domain: binary_sensor
+
+    deadband_watts:
+      name: Deadband (W)
+      description: Keep this export margin before charging starts
+      default: 100
+      selector:
+        number:
+          min: 0
+          max: 2000
+          mode: box
+          unit_of_measurement: W
+
+    min_charge_rate_watts:
+      name: Minimum charge rate (W)
+      description: Below this, charging is stopped
+      default: 1400
+      selector:
+        number:
+          min: 500
+          max: 7000
+          mode: box
+          unit_of_measurement: W
+
+    max_charge_rate_watts:
+      name: Maximum charge rate (W)
+      description: Upper limit sent to Zappi
+      default: 11000
+      selector:
+        number:
+          min: 1000
+          max: 22000
+          mode: box
+          unit_of_measurement: W
+
+    schedule_mode:
+      name: Charging mode for active slot
+      description: MODE_FAST is recommended for direct power targeting
+      default: MODE_FAST
+      selector:
+        select:
+          options:
+            - MODE_FAST
+            - MODE_ECO
+            - MODE_ECO_PLUS
+
+    slot_minutes:
+      name: Slot length (minutes)
+      description: Each update writes a slot from now to now + slot length
+      default: 15
+      selector:
+        number:
+          min: 5
+          max: 60
+          mode: box
+          unit_of_measurement: min
+
+    enable_managed_mode:
+      name: Ensure managed mode is enabled
+      default: true
+      selector:
+        boolean:
+
+    auto_scheduler_enabled:
+      name: Auto scheduler enabled when managed mode is set
+      default: true
+      selector:
+        boolean:
+
+mode: single
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input export_power_sensor
+  - platform: time_pattern
+    minutes: "/1"
+
+variables:
+  zappi_entity: !input zappi_select_entity
+  export_sensor: !input export_power_sensor
+  plug_sensor: !input zappi_plugged_binary
+  deadband: !input deadband_watts
+  min_rate: !input min_charge_rate_watts
+  max_rate: !input max_charge_rate_watts
+  active_mode: !input schedule_mode
+  slot_len: !input slot_minutes
+  managed_mode: !input enable_managed_mode
+  auto_scheduler: !input auto_scheduler_enabled
+
+  plug_ok: >
+    {{ plug_sensor == '' or is_state(plug_sensor, 'on') }}
+
+  export_watts: >
+    {{ [states(export_sensor) | float(0), 0] | max }}
+
+  desired_watts_raw: >
+    {{ export_watts - (deadband | float(0)) }}
+
+  desired_watts: >
+    {{ [ [desired_watts_raw | int(0), max_rate | int(0)] | min, 0 ] | max }}
+
+  start_time_utc: >
+    {{ utcnow().replace(second=0, microsecond=0).isoformat(timespec='milliseconds').replace('+00:00', 'Z') }}
+
+  end_time_utc: >
+    {{ (utcnow() + timedelta(minutes=slot_len | int(15))).replace(second=0, microsecond=0).isoformat(timespec='milliseconds').replace('+00:00', 'Z') }}
+
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ managed_mode }}"
+        sequence:
+          - service: myenergi.myenergi_set_managed_mode
+            target:
+              entity_id: !input zappi_select_entity
+            data:
+              managed_mode_enabled: true
+              auto_scheduler_enabled: "{{ auto_scheduler }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ not plug_ok }}"
+        sequence:
+          - service: myenergi.myenergi_set_super_schedule_slot
+            target:
+              entity_id: !input zappi_select_entity
+            data:
+              start_time: "{{ start_time_utc }}"
+              end_time: "{{ end_time_utc }}"
+              mode: MODE_STOP
+          - stop: EV not plugged in, forcing MODE_STOP
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ desired_watts >= (min_rate | int(0)) }}"
+        sequence:
+          - service: myenergi.myenergi_set_super_schedule_slot
+            target:
+              entity_id: !input zappi_select_entity
+            data:
+              start_time: "{{ start_time_utc }}"
+              end_time: "{{ end_time_utc }}"
+              mode: "{{ active_mode }}"
+              charge_rate_watts: "{{ desired_watts }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ desired_watts < (min_rate | int(0)) }}"
+        sequence:
+          - service: myenergi.myenergi_set_super_schedule_slot
+            target:
+              entity_id: !input zappi_select_entity
+            data:
+              start_time: "{{ start_time_utc }}"
+              end_time: "{{ end_time_utc }}"
+              mode: MODE_STOP

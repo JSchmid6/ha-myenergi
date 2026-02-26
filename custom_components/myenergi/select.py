@@ -19,6 +19,15 @@ ATTR_BOOST_TIME = "time"
 ATTR_BOOST_TARGET = "target"
 ATTR_BOOST_WHEN = "when"
 ATTR_CHARGE_TARGET = "chargetarget"
+ATTR_MANAGED_MODE_ENABLED = "managed_mode_enabled"
+ATTR_AUTO_SCHEDULER_ENABLED = "auto_scheduler_enabled"
+ATTR_START_TIME = "start_time"
+ATTR_END_TIME = "end_time"
+ATTR_MODE = "mode"
+ATTR_CHARGE_RATE_WATTS = "charge_rate_watts"
+ATTR_ENERGY_TARGET_WH = "energy_target_wh"
+
+SUPER_SCHEDULE_MODES = ["MODE_FAST", "MODE_ECO", "MODE_ECO_PLUS", "MODE_STOP"]
 BOOST_SCHEMA = {
     vol.Required(ATTR_BOOST_AMOUNT): vol.All(
         vol.Coerce(float),
@@ -42,6 +51,23 @@ LIBBI_CHARGE_TARGET_SCHEMA = {
         vol.Coerce(float),
         vol.Range(min=0, max=20400),
     )
+}
+MANAGED_MODE_SCHEMA = {
+    vol.Required(ATTR_MANAGED_MODE_ENABLED): vol.Coerce(bool),
+    vol.Optional(ATTR_AUTO_SCHEDULER_ENABLED): vol.Coerce(bool),
+}
+SUPER_SCHEDULE_SLOT_SCHEMA = {
+    vol.Required(ATTR_START_TIME): str,
+    vol.Required(ATTR_END_TIME): str,
+    vol.Required(ATTR_MODE): vol.In(SUPER_SCHEDULE_MODES),
+    vol.Optional(ATTR_CHARGE_RATE_WATTS): vol.All(
+        vol.Coerce(float),
+        vol.Range(min=0, max=22000),
+    ),
+    vol.Optional(ATTR_ENERGY_TARGET_WH): vol.All(
+        vol.Coerce(float),
+        vol.Range(min=0, max=100000),
+    ),
 }
 
 
@@ -74,6 +100,16 @@ async def async_setup_entry(hass, entry, async_add_devices):
                 "myenergi_unlock",
                 {},
                 "unlock",
+            )
+            platform.async_register_entity_service(
+                "myenergi_set_managed_mode",
+                MANAGED_MODE_SCHEMA,
+                "set_managed_mode",
+            )
+            platform.async_register_entity_service(
+                "myenergi_set_super_schedule_slot",
+                SUPER_SCHEDULE_SLOT_SCHEMA,
+                "set_super_schedule_slot",
             )
             devices.append(ZappiChargeModeSelect(coordinator, device, entry))
             devices.append(ZappiPhaseSettingSelect(coordinator, device, entry))

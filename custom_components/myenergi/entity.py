@@ -1,6 +1,7 @@
 """MyenergiEntity class"""
 
 import logging
+from typing import Any
 
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -94,6 +95,79 @@ class MyenergiEntity(CoordinatorEntity):
         _LOGGER.debug("Setting libbi charge target to %s Wh", chargetarget)
         """Set libbi charge target"""
         await self.device.set_charge_target(chargetarget)
+        self.schedule_update_ha_state()
+
+    async def _call_s18_api(
+        self,
+        method: str,
+        endpoint: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        connection = self.coordinator.client._connection
+        if not connection.app_email or not connection.app_password:
+            raise ValueError(
+                "App credentials are required for this service. "
+                "Please configure app_email and app_password in integration options."
+            )
+
+        await self.hass.async_add_executor_job(connection.checkAndUpdateToken)
+        headers = {"Authorization": f"Bearer {connection.oauth.access_token}"}
+        response = await connection.asyncClient.request(
+            method,
+            f"https://api.s18.myenergi.net{endpoint}",
+            json=payload,
+            headers=headers,
+            timeout=connection.timeout,
+        )
+        response.raise_for_status()
+        if response.content:
+            return response.json()
+        return {}
+
+    @property
+    def _s18_device_id(self) -> str:
+        if self.device.kind == "zappi":
+            return f"ZA{self.device.serial_number}"
+        raise ValueError(f"Unsupported device kind for s18 API: {self.device.kind}")
+
+    async def set_managed_mode(
+        self,
+        managed_mode_enabled: bool,
+        auto_scheduler_enabled: bool | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {"managedModeEnabled": managed_mode_enabled}
+        if auto_scheduler_enabled is not None:
+            payload["autoSchedulerEnabled"] = auto_scheduler_enabled
+        await self._call_s18_api(
+            "PATCH",
+            f"/devices/{self._s18_device_id}/cloud-configuration",
+            payload,
+        )
+        self.schedule_update_ha_state()
+
+    async def set_super_schedule_slot(
+        self,
+        start_time: str,
+        end_time: str,
+        mode: str,
+        charge_rate_watts: float | None = None,
+        energy_target_wh: float | None = None,
+    ) -> None:
+        slot: dict[str, Any] = {
+            "startTime": start_time,
+            "endTime": end_time,
+            "mode": mode,
+        }
+        if charge_rate_watts is not None:
+            slot["chargeRateWatts"] = int(charge_rate_watts)
+        if energy_target_wh is not None:
+            slot["energyTargetWh"] = int(energy_target_wh)
+
+        await self._call_s18_api(
+            "PUT",
+            f"/devices/{self._s18_device_id}/super-schedule",
+            {"chargeSchedules": [slot]},
+        )
         self.schedule_update_ha_state()
 
 
